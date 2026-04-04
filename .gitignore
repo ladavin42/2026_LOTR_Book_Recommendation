@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# Data — local only, do not commit
+data/
+
+# Marimo cache
+__marimo__/
+
+# Jupyter (if used)
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets / environment
+.env
+*.env
