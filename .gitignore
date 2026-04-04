@@ -25,3 +25,6 @@ Thumbs.db
 # Secrets / environment
 .env
 *.env
+
+# Workspace file
+*.code-workspace
