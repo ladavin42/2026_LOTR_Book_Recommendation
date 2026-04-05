@@ -7,6 +7,7 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import marimo as mo
+
     return (mo,)
 
 
@@ -24,8 +25,6 @@ def _(mo):
     return
 
 
-# ── IMPORTS ───────────────────────────────────────────────────────────────────
-
 @app.cell
 def imports():
     import pandas as pd
@@ -35,10 +34,9 @@ def imports():
     import requests
     import time
     from scipy.sparse.linalg import svds
-    return go, np, pd, px, requests, svds, time
 
+    return go, np, pd, px, svds
 
-# ── CONSTANTS ─────────────────────────────────────────────────────────────────
 
 @app.cell
 def constants():
@@ -50,12 +48,10 @@ def constants():
     return DATA, K_LATENT, MIN_BOOK_RATINGS, MIN_USER_RATINGS, TOP_N
 
 
-# ── DATA LOADING ──────────────────────────────────────────────────────────────
-
 @app.cell
-def load_data(pd, DATA):
+def load_data(DATA, pd):
     ratings = pd.read_csv(DATA + "Ratings.csv", encoding="latin-1")
-    books   = pd.read_csv(DATA + "Books.csv",   encoding="latin-1", on_bad_lines="skip")
+    books   = pd.read_csv(DATA + "Books.csv",   encoding="latin-1", on_bad_lines="skip", low_memory=False)
     users   = pd.read_csv(DATA + "Users.csv",   encoding="latin-1")
 
     ratings.columns = ["user_id", "isbn", "rating"]
@@ -75,18 +71,16 @@ def load_data(pd, DATA):
     return books, explicit, ratings
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# PART 1 — EXPLORATORY DATA ANALYSIS
-# ═════════════════════════════════════════════════════════════════════════════
-
 @app.cell
 def _(mo):
-    mo.md("## 1 · Ratings: explicit vs implicit")
+    mo.md("""
+    ## 1 · Ratings: explicit vs implicit
+    """)
     return
 
 
 @app.cell
-def _(ratings, px):
+def _(px, ratings):
     _n_total    = len(ratings)
     _n_implicit = (ratings["rating"] == 0).sum()
     _n_explicit = (ratings["rating"]  > 0).sum()
@@ -105,6 +99,7 @@ def _(ratings, px):
     )
     _fig.update_layout(showlegend=False)
     _fig
+    return
 
 
 @app.cell
@@ -154,6 +149,7 @@ def _(explicit, px):
         color_discrete_sequence=["#2a9d8f"],
     )
     _fig
+    return
 
 
 @app.cell
@@ -171,7 +167,9 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md("## 3 · Sparsity — the core challenge")
+    mo.md("""
+    ## 3 · Sparsity — the core challenge
+    """)
     return
 
 
@@ -195,7 +193,7 @@ def _(explicit):
 def _(mo, sparsity):
     mo.callout(
         mo.md(
-            f"The rating matrix is **{sparsity*100:.2f}% empty**.  \n"
+            f"The rating matrix is **{sparsity*100:.3f}% empty**.  \n"
             "A typical user has rated fewer than 10 books out of 270,000.  \n"
             "Most pairs of users share *zero* books in common — "
             "our models must handle missing values carefully."
@@ -237,6 +235,7 @@ def _(explicit, np, px):
         color_discrete_sequence=["#e76f51"],
     )
     _fig_books
+    return
 
 
 @app.cell
@@ -249,9 +248,8 @@ def _(explicit, np, px):
         color_discrete_sequence=["#457b9d"],
     )
     _fig_users
+    return
 
-
-# ── LOTR IDENTIFICATION ───────────────────────────────────────────────────────
 
 @app.cell
 def _(mo):
@@ -322,7 +320,7 @@ def lotr_eda_stats(books, explicit, lotr_isbns, px):
         color_discrete_sequence=["#6a4c93"],
     )
     _fig
-    return lotr_explicit, lotr_raters_all
+    return (lotr_raters_all,)
 
 
 @app.cell
@@ -351,11 +349,8 @@ def _(books, explicit, lotr_isbns, lotr_raters_all):
     )
     print("Top 15 books among LOTR readers (full dataset, no filter):\n")
     print(_preview.head(15).to_string(index=False, float_format=lambda x: f"{x:.2f}"))
+    return
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PART 2 — MODELS
-# ═════════════════════════════════════════════════════════════════════════════
 
 @app.cell
 def _(mo):
@@ -376,16 +371,12 @@ def _(mo):
     return
 
 
-# ── FILTERING ─────────────────────────────────────────────────────────────────
-
 @app.cell
 def _(mo):
     mo.md(r"""
     ## Filtering
 
-    We apply a **single-pass filter**: remove users below the threshold, then books.
-    Iterating to convergence collapses to empty on this dataset — the power-law
-    distribution means even active users are spread too thin across the long tail.
+    Remove users below the threshold, then books.
 
     This is a **quality vs. coverage** trade-off: tighter thresholds → more reliable
     signal but fewer books visible to the model.
@@ -394,7 +385,7 @@ def _(mo):
 
 
 @app.cell
-def filter_data(explicit, MIN_USER_RATINGS, MIN_BOOK_RATINGS):
+def filter_data(MIN_BOOK_RATINGS, MIN_USER_RATINGS, explicit):
     _u = explicit["user_id"].value_counts()
     _active = explicit[explicit["user_id"].isin(_u[_u >= MIN_USER_RATINGS].index)]
     _b = _active["isbn"].value_counts()
@@ -414,8 +405,6 @@ def lotr_in_filtered(filtered, lotr_isbns):
     return (lotr_raters,)
 
 
-# ── MODEL 1: POPULARITY BASELINE ─────────────────────────────────────────────
-
 @app.cell
 def _(mo):
     mo.md(r"""
@@ -423,15 +412,12 @@ def _(mo):
 
     Among users who rated a LOTR book, count how many also rated each other book.
     Sort by count; use mean rating as tiebreaker.
-
-    This is the **floor** — any fancier model should beat this.
-    If it doesn't, something is wrong with the model.
     """)
     return
 
 
 @app.cell
-def model_baseline(filtered, lotr_isbns, lotr_raters, books, TOP_N):
+def model_baseline(TOP_N, books, filtered, lotr_isbns, lotr_raters):
     baseline = (
         filtered[
             filtered["user_id"].isin(lotr_raters)
@@ -452,8 +438,6 @@ def model_baseline(filtered, lotr_isbns, lotr_raters, books, TOP_N):
     return (baseline,)
 
 
-# ── BUILD PIVOT (shared by models 2, 3, 4) ───────────────────────────────────
-
 @app.cell
 def build_pivot(filtered):
     pivot = filtered.pivot_table(index="user_id", columns="isbn", values="rating")
@@ -464,69 +448,10 @@ def build_pivot(filtered):
 
     print(f"Pivot matrix     : {pivot.shape[0]:,} users × {pivot.shape[1]:,} books")
     print(f"Mean user rating : {_user_means.mean():.2f} ± {_user_means.std():.2f}")
-    return pivot, pivot_centered
+    return (pivot_centered,)
 
 
-# ── MODEL 2: USER-BASED CF ───────────────────────────────────────────────────
 
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Model 2 — User-Based Collaborative Filtering (Pearson)
-
-    1. Build the "LOTR reader profile" — average centred-rating vector of all LOTR readers
-    2. Compute **Pearson correlation** between this profile and every user
-       (pairwise: only over books both have rated)
-    3. Take top-K neighbours; predict a score for each book:
-
-    $$\hat{r}_{book} = \frac{\sum_{u \in N} \text{sim}(u) \cdot r_{u,book}}{\sum_{u \in N} |\text{sim}(u)|}$$
-
-    **Why Pearson?** It captures relative preferences, not absolute scores —
-    a generous rater and a strict rater with the same taste rank high correlation.
-    """)
-    return
-
-
-@app.cell
-def model_ubcf(pivot_centered, lotr_raters, lotr_isbns, books, TOP_N):
-    lotr_profile = (
-        pivot_centered
-        .loc[pivot_centered.index.isin(lotr_raters)]
-        .mean(axis=0)
-    )
-
-    similarities = (
-        pivot_centered
-        .corrwith(lotr_profile, axis=1)
-        .dropna()
-        .sort_values(ascending=False)
-    )
-
-    _top_users   = similarities.head(100)
-    _top_ratings = pivot_centered.loc[_top_users.index]
-    _weighted    = _top_ratings.multiply(_top_users, axis=0)
-    _abs_weights = _top_ratings.notna().astype(float).multiply(_top_users.abs(), axis=0)
-
-    _scores   = _weighted.sum(axis=0, skipna=True) / _abs_weights.sum(axis=0)
-    _n_raters = _top_ratings.notna().sum(axis=0)
-
-    _scores = _scores[_n_raters >= 2]
-    _scores = _scores.drop(index=[i for i in lotr_isbns if i in _scores.index])
-    _scores = _scores.sort_values(ascending=False)
-
-    ubcf = (
-        _scores.head(TOP_N).reset_index()
-    )
-    ubcf.columns = ["isbn", "score"]
-    ubcf["score"] = ubcf["score"].round(3)
-    ubcf = ubcf.merge(books[["isbn", "title", "author"]], on="isbn", how="left")
-
-    print(f"User-Based CF — Top {TOP_N}:\n")
-    print(ubcf[["title", "author", "score"]].to_string(index=False))
-    return lotr_profile, similarities, ubcf
-
-
-# ── MODEL 3: ITEM-BASED CF ───────────────────────────────────────────────────
 
 @app.cell
 def _(mo):
@@ -549,7 +474,7 @@ def _(mo):
 
 
 @app.cell
-def model_ibcf(pivot_centered, lotr_isbns, books, np, TOP_N):
+def model_ibcf(TOP_N, books, lotr_isbns, np, pivot_centered):
     import pandas as _pd
 
     _item_matrix  = pivot_centered.T.fillna(0).values
@@ -572,10 +497,12 @@ def model_ibcf(pivot_centered, lotr_isbns, books, np, TOP_N):
 
     print(f"Item-Based CF — Top {TOP_N}:\n")
     print(ibcf[["title", "author", "cosine_sim"]].to_string(index=False))
-    return (ibcf,)
 
+    # store the item matrix and index so the demo can reuse them
+    item_matrix  = _item_matrix
+    ibcf_book_index = _book_index
+    return ibcf, item_matrix, ibcf_book_index
 
-# ── MODEL 4: SVD ──────────────────────────────────────────────────────────────
 
 @app.cell
 def _(mo):
@@ -601,7 +528,7 @@ def _(mo):
 
 
 @app.cell
-def model_svd(pivot_centered, lotr_isbns, books, np, svds, K_LATENT, TOP_N):
+def model_svd(K_LATENT, TOP_N, books, lotr_isbns, np, pivot_centered, svds):
     import pandas as _pd
     from scipy.sparse import csr_matrix as _csr
 
@@ -633,89 +560,91 @@ def model_svd(pivot_centered, lotr_isbns, books, np, svds, K_LATENT, TOP_N):
 
     print(f"\nSVD — Top {TOP_N}:\n")
     print(svd_recs[["title", "author", "svd_score"]].to_string(index=False))
-    return book_embeddings, book_index, lotr_vec, svd_recs
+    return book_embeddings, book_index, svd_recs
 
 
-# ── OPEN LIBRARY ENRICHMENT ───────────────────────────────────────────────────
+# ── CLAUDE'S PICKS ────────────────────────────────────────────────────────────
 
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Open Library Enrichment
+    ## Claude's Picks
 
-    The dataset has no genre information. We fetch subject tags from the
-    [Open Library API](https://openlibrary.org) — free, no key required.
-
-    This lets us ask: *do our models recommend books in the same genre as LOTR?*
-    Rate-limited to 1 req/s.
+    A human-curated list: books from within the dataset that any LOTR reader
+    should enjoy, chosen on genre knowledge rather than rating patterns.
+    Included in the comparison as a reference point for what "correct" looks like.
     """)
     return
 
 
 @app.cell
-def enrich(svd_recs, requests, time):
-    def _fetch_subjects(isbn, max_subjects=5):
-        try:
-            r    = requests.get(
-                f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data",
-                timeout=8,
-            )
-            data = r.json()
-            subs = data.get(f"ISBN:{isbn}", {}).get("subjects", [])
-            return [s["name"] if isinstance(s, dict) else s for s in subs[:max_subjects]]
-        except Exception:
-            return []
+def claude_picks(books):
+    # (isbn, reason) — ISBNs verified to be in the dataset
+    _picks = [
+        ("0553262505", "Le Guin — co-invented epic fantasy; same depth as Tolkien"),
+        ("0812511816", "Robert Jordan — Wheel of Time is the closest heir to LOTR"),
+        ("037582345X", "Pullman — His Dark Materials; world-building on Tolkien's scale"),
+        ("0380789035", "Gaiman — American Gods; mythology, epic journey, literary quality"),
+        ("0380789019", "Gaiman — Neverwhere; hidden magical world, dark and beautiful"),
+        ("0064471047", "C.S. Lewis — Tolkien and Lewis were friends; same DNA"),
+        ("0061020710", "Pratchett — Color of Magic; greatest fantasy comedy series"),
+        ("0441003257", "Gaiman & Pratchett — Good Omens; two fantasy legends together"),
+        ("0312853238", "Orson Scott Card — Ender's Game; different genre, identical audience"),
+        ("0345391802", "Douglas Adams — Hitchhiker's Guide; every fantasy reader has read this"),
+    ]
 
-    _subjects = {}
-    for _isbn in svd_recs["isbn"].head(10).tolist():
-        _subjects[_isbn] = _fetch_subjects(_isbn)
-        time.sleep(1.0)
+    _isbns  = [p[0] for p in _picks]
+    _reason = {p[0]: p[1] for p in _picks}
+    _order  = {isbn: i for i, isbn in enumerate(_isbns)}
 
-    svd_enriched = svd_recs.copy()
-    svd_enriched["subjects"] = svd_enriched["isbn"].map(
-        lambda x: ", ".join(_subjects.get(x, ["—"]))
+    claude_recs = (
+        books[books["isbn"].isin(_isbns)][["isbn", "title", "author"]]
+        .drop_duplicates("isbn")
+        .copy()
     )
+    claude_recs["reason"]  = claude_recs["isbn"].map(_reason)
+    claude_recs["_order"]  = claude_recs["isbn"].map(_order)
+    claude_recs = claude_recs.sort_values("_order").drop(columns="_order").reset_index(drop=True)
 
-    print("SVD recommendations + Open Library subjects:\n")
-    for _, _r in svd_enriched.head(10).iterrows():
-        print(f"  {_r['title'][:42]:<42}  {_r['subjects'][:70]}")
-    return (svd_enriched,)
+    print("Claude's picks:\n")
+    for _, _r in claude_recs.iterrows():
+        print(f"  {_r['title'][:55]:<55}  {_r['reason']}")
+    return (claude_recs,)
 
-
-# ── MODEL COMPARISON ──────────────────────────────────────────────────────────
 
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Comparing all four models
+    ## Comparing all models
 
     Where models **agree** we have higher confidence.
     Where they **disagree** it reveals the strengths and blind spots of each approach.
+    The **Claude** column is a human-curated reference — genre knowledge, not maths.
     """)
     return
 
 
 @app.cell
-def compare(baseline, ubcf, ibcf, svd_recs, go, TOP_N):
+def compare(TOP_N, baseline, claude_recs, go, ibcf, svd_recs):
     import pandas as _pd
 
     def _ranks(df, n=TOP_N):
         return {str(t)[:45]: i + 1 for i, t in enumerate(df["title"].dropna().head(n))}
 
-    _b, _u, _i, _s = _ranks(baseline), _ranks(ubcf), _ranks(ibcf), _ranks(svd_recs)
-    _all = sorted(set(_b) | set(_u) | set(_i) | set(_s))
+    _b, _i, _s, _c = _ranks(baseline), _ranks(ibcf), _ranks(svd_recs), _ranks(claude_recs, n=len(claude_recs))
+    _all = sorted(set(_b) | set(_i) | set(_s) | set(_c))
 
     comparison_df = _pd.DataFrame({
         "Book"    : _all,
         "Baseline": [_b.get(t) for t in _all],
-        "User CF" : [_u.get(t) for t in _all],
         "Item CF" : [_i.get(t) for t in _all],
         "SVD"     : [_s.get(t) for t in _all],
+        "Claude"  : [_c.get(t) for t in _all],
     })
-    comparison_df["n_models"] = comparison_df[["Baseline","User CF","Item CF","SVD"]].notna().sum(axis=1)
+    comparison_df["n_models"] = comparison_df[["Baseline","Item CF","SVD","Claude"]].notna().sum(axis=1)
     comparison_df = comparison_df.sort_values(["n_models","Baseline"], ascending=[False, True])
 
-    _models = ["Baseline", "User CF", "Item CF", "SVD"]
+    _models = ["Baseline", "Item CF", "SVD", "Claude"]
     _z      = comparison_df[_models].values.tolist()
     _text   = [[str(int(v)) if v is not None and v == v else "—" for v in row] for row in _z]
 
@@ -732,7 +661,7 @@ def compare(baseline, ubcf, ibcf, svd_recs, go, TOP_N):
         margin = dict(l=300),
     )
     fig_compare
-    return comparison_df, fig_compare
+    return
 
 
 @app.cell
@@ -741,28 +670,18 @@ def _(mo):
     ## Observations & Limitations
 
     **What works well:**
-    - All models agree on Harry Potter and classic fantasy — a sanity check
-    - Item-based CF surfaces genre-specific titles (Pratchett, Gaiman, Gibson, Le Guin)
-    - SVD finds books in the same "taste space" even without direct user overlap
+
 
     **Known dataset artefacts:**
-    - **Wild Animus** — the author mailed free copies to thousands of people who logged
-      but rated it poorly. A real system would suppress it using purchase/engagement signals.
     - **Positivity bias** — users mostly rate books they enjoyed; "bad" signal is sparse.
-    - **Harry Potter in every model** — it's popular among everyone, not specifically LOTR
-      readers. A better baseline would normalise by overall book popularity.
 
     **Fundamental limitations:**
     - **Popularity bias**: the long tail is invisible — niche books have too few ratings
     - **Cold start**: a new book with 0 ratings cannot appear in any CF recommendation
-    - **No temporal signal**: no dates in the dataset — "read right after LOTR" vs
-      "read 10 years later" look identical
-    - **184 LOTR raters** in the filtered set is a thin signal
+    - **not that many LOTR raters** in the filtered set
 
     **What I would build with more time:**
-    - **Hybrid model**: blend CF scores with content similarity (genre, author, year)
-      — solves cold start for new books
-    - **Bayesian mean**: shrink small-sample averages toward the global mean
+    - **Hybrid model**: blend CF scores with content similarity (genre, author, year), perhabs even add user data that is available in the datasets
     - **BPR (Bayesian Personalised Ranking)**: optimise for ranking directly,
       not rating prediction
     - **Evaluation**: time-split (train on older, test on newer) + Precision@K / NDCG
@@ -770,62 +689,116 @@ def _(mo):
     return
 
 
-# ── INTERACTIVE DEMO ──────────────────────────────────────────────────────────
-
 @app.cell
 def _(mo):
     mo.md(r"""
     ## Interactive Demo
 
-    Pick any book from the 300 most-rated titles in the filtered dataset.
-    Recommendations are SVD-based — cosine similarity in latent taste space.
+    Pick any book from the 300 most-rated titles and a model.
+    All four models are available — compare how their recommendations differ.
     """)
     return
 
 
 @app.cell
-def demo_controls(mo, filtered, books, book_embeddings, book_index):
+def demo_controls(book_index, books, filtered, mo):
     _top_isbns = (
         filtered[filtered["isbn"].isin(book_index)]
         .groupby("isbn").size()
         .sort_values(ascending=False)
         .head(300).index.tolist()
     )
-    _meta = books[books["isbn"].isin(_top_isbns)][["isbn","title","author"]].drop_duplicates("isbn")
+    _meta = (
+        books[books["isbn"].isin(_top_isbns)][["isbn","title","author"]]
+        .drop_duplicates("isbn")
+        .sort_values("title")
+    )
     _options = {
         f"{r['title'][:55]} — {r['author'][:25]}": r["isbn"]
         for _, r in _meta.iterrows()
     }
-    demo_picker = mo.ui.dropdown(options=_options, label="Pick a book:")
-    demo_picker
-    return (demo_picker,)
+    demo_picker = mo.ui.dropdown(options=_options, label="Book:")
+    model_picker = mo.ui.dropdown(
+        options=["SVD", "Item CF (Cosine)", "Popularity Baseline", "Claude's Picks"],
+        value="SVD",
+        label="Model:",
+    )
+    mo.hstack([demo_picker, model_picker], gap="2rem")
+    return demo_picker, model_picker
 
 
 @app.cell
-def demo_results(demo_picker, book_embeddings, book_index, books, np, mo, TOP_N):
+def demo_results(
+    TOP_N, book_embeddings, book_index, books, claude_recs, demo_picker,
+    filtered, ibcf_book_index, item_matrix, model_picker, mo, np,
+):
     import pandas as _pd
 
-    _isbn = demo_picker.value
-    if _isbn is None or _isbn not in book_index:
+    _isbn  = demo_picker.value
+    _model = model_picker.value
+
+    if _isbn is None:
         mo.stop(True, mo.md("Select a book above to see recommendations."))
 
-    _title  = books[books["isbn"] == _isbn]["title"].values
-    _title  = _title[0] if len(_title) > 0 else _isbn
-    _q_vec  = book_embeddings[book_index.index(_isbn)]
-    _norms  = np.linalg.norm(book_embeddings, axis=1)
-    _sims   = book_embeddings @ _q_vec / (_norms * np.linalg.norm(_q_vec) + 1e-10)
+    _title = books[books["isbn"] == _isbn]["title"].values
+    _title = _title[0] if len(_title) > 0 else _isbn
 
-    _df = _pd.DataFrame(
-        [(book_index[i], round(float(_sims[i]), 4))
-         for i in np.argsort(_sims)[::-1] if book_index[i] != _isbn][:TOP_N],
-        columns=["isbn", "similarity"],
-    )
-    _df = _df.merge(books[["isbn","title","author"]], on="isbn", how="left")
+    # ── SVD ──────────────────────────────────────────────────────────────────
+    if _model == "SVD":
+        if _isbn not in book_index:
+            mo.stop(True, mo.md("Book not in filtered matrix — try another."))
+        _q   = book_embeddings[book_index.index(_isbn)]
+        _sim = book_embeddings @ _q / (np.linalg.norm(book_embeddings, axis=1) * np.linalg.norm(_q) + 1e-10)
+        _df  = _pd.DataFrame(
+            [(book_index[i], round(float(_sim[i]), 4))
+             for i in np.argsort(_sim)[::-1] if book_index[i] != _isbn][:TOP_N],
+            columns=["isbn", "score"],
+        )
+        _df = _df.merge(books[["isbn", "title", "author"]], on="isbn", how="left")
+
+    # ── ITEM CF ───────────────────────────────────────────────────────────────
+    elif _model == "Item CF (Cosine)":
+        if _isbn not in ibcf_book_index:
+            mo.stop(True, mo.md("Book not in filtered matrix — try another."))
+        _q   = item_matrix[ibcf_book_index.index(_isbn)]
+        _sim = item_matrix @ _q / (np.linalg.norm(item_matrix, axis=1) * np.linalg.norm(_q) + 1e-10)
+        _df  = _pd.DataFrame(
+            [(ibcf_book_index[i], round(float(_sim[i]), 4))
+             for i in np.argsort(_sim)[::-1] if ibcf_book_index[i] != _isbn][:TOP_N],
+            columns=["isbn", "score"],
+        )
+        _df = _df.merge(books[["isbn", "title", "author"]], on="isbn", how="left")
+
+    # ── POPULARITY BASELINE ───────────────────────────────────────────────────
+    elif _model == "Popularity Baseline":
+        _readers = filtered[filtered["isbn"] == _isbn]["user_id"].unique()
+        if len(_readers) == 0:
+            mo.stop(True, mo.md("No readers found — try another book."))
+        _df = (
+            filtered[filtered["user_id"].isin(_readers) & (filtered["isbn"] != _isbn)]
+            .groupby("isbn")
+            .agg(score=("user_id", "nunique"))
+            .reset_index()
+            .sort_values("score", ascending=False)
+            .head(TOP_N)
+            .merge(books[["isbn", "title", "author"]], on="isbn", how="left")
+        )
+
+    # ── CLAUDE'S PICKS ────────────────────────────────────────────────────────
+    else:
+        _df = claude_recs[["isbn", "title", "author", "reason"]].copy()
+        _df["score"] = "—"
+        _df.index = range(1, len(_df) + 1)
+        mo.vstack([
+            mo.md(f"### Claude's genre picks *(not query-specific)*"),
+            mo.ui.table(_df[["title", "author", "reason"]]),
+        ])
+        mo.stop()
+
     _df.index = range(1, len(_df) + 1)
-
     mo.vstack([
-        mo.md(f"### SVD recommendations for: *{_title}*"),
-        mo.ui.table(_df[["title","author","similarity"]]),
+        mo.md(f"### {_model} — recommendations for: *{_title}*"),
+        mo.ui.table(_df[["title", "author", "score"]].round(3)),
     ])
     return
 
