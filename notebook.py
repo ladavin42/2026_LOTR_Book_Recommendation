@@ -557,8 +557,9 @@ def _(mo):
     mo.md(r"""
     ## Claude's Picks
 
-    A human-curated list: books from within the dataset that any LOTR reader
+    15 hand-picked books from within the filtered dataset that any LOTR reader
     should enjoy, chosen on genre knowledge rather than rating patterns.
+    All ISBNs are verified present in the 20/20 filtered set.
     Included in the comparison as a reference point for what "correct" looks like.
     """)
     return
@@ -566,18 +567,23 @@ def _(mo):
 
 @app.cell
 def claude_picks(books):
-    # (isbn, reason) — ISBNs verified to be in the dataset
+    # (isbn, reason) — all ISBNs verified present in the 20/20 filtered dataset
     _picks = [
-        ("0553262505", "Le Guin — co-invented epic fantasy; same depth as Tolkien"),
-        ("0812511816", "Robert Jordan — Wheel of Time is the closest heir to LOTR"),
-        ("037582345X", "Pullman — His Dark Materials; world-building on Tolkien's scale"),
-        ("0380789035", "Gaiman — American Gods; mythology, epic journey, literary quality"),
-        ("0380789019", "Gaiman — Neverwhere; hidden magical world, dark and beautiful"),
-        ("0064471047", "C.S. Lewis — Tolkien and Lewis were friends; same DNA"),
-        ("0061020710", "Pratchett — Color of Magic; greatest fantasy comedy series"),
-        ("0441003257", "Gaiman & Pratchett — Good Omens; two fantasy legends together"),
-        ("0312853238", "Orson Scott Card — Ender's Game; different genre, identical audience"),
-        ("0345391802", "Douglas Adams — Hitchhiker's Guide; every fantasy reader has read this"),
+        ("059035342X", "Rowling — Harry Potter; most natural next series for any LOTR reader"),
+        ("0812511816", "Robert Jordan — Wheel of Time; closest structural heir to LOTR"),
+        ("0441172717", "Frank Herbert — Dune; the LOTR of sci-fi: world-building, prophecy, chosen one"),
+        ("0380002930", "Richard Adams — Watership Down; epic journey, unlikely heroes, same emotional register"),
+        ("0345314255", "Terry Brooks — Sword of Shannara; literally modelled on LOTR, most direct lineage"),
+        ("0345413350", "Philip Pullman — His Dark Materials; world-building on Tolkien's scale"),
+        ("0553262505", "Ursula K. Le Guin — Earthsea; co-invented the fantasy genre alongside Tolkien"),
+        ("0064471047", "C.S. Lewis — Narnia; Tolkien and Lewis were close friends, same mythological DNA"),
+        ("0380789035", "Neil Gaiman — American Gods; mythology, ancient beings, literary quality"),
+        ("0380789019", "Neil Gaiman — Neverwhere; hidden magical world beneath London"),
+        ("0441003257", "Gaiman & Pratchett — Good Omens; two fantasy legends collaborating"),
+        ("0061020710", "Terry Pratchett — Discworld; the greatest fantasy universe outside Middle-earth"),
+        ("0451166582", "Stephen King — The Eyes of the Dragon; King's only pure fantasy novel"),
+        ("0812550706", "Orson Scott Card — Ender's Game; different genre, identical passionate readership"),
+        ("0345391802", "Douglas Adams — Hitchhiker's Guide; essential reading for any genre fiction fan"),
     ]
 
     _isbns  = [p[0] for p in _picks]
