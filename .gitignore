@@ -28,3 +28,6 @@ Thumbs.db
 
 # Workspace file
 *.code-workspace
+
+# Local interview notes — do not publish
+interview_notes.md

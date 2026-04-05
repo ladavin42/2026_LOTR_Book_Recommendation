@@ -358,15 +358,15 @@ def _(mo):
     ---
     # Part 2 — Models
 
-    Four progressively more sophisticated models, all answering the same question:
+    Three progressively more sophisticated models, all answering the same question:
     **"I liked Lord of the Rings — what should I read next?"**
 
     | # | Model | Core idea |
     |---|---|---|
-    | 1 | **Popularity baseline** | Books most read by LOTR readers |
-    | 2 | **User-based CF** | Find users similar to LOTR readers; use their ratings |
-    | 3 | **Item-based CF** | Find books whose rating patterns resemble LOTR |
-    | 4 | **SVD** | Decompose the full matrix into latent "taste dimensions" |
+    | 1 | **Popularity baseline** | Books most read by LOTR readers, ranked by count then mean rating |
+    | 2 | **Item-based CF** | Find books whose rating patterns resemble LOTR (cosine similarity) |
+    | 3 | **SVD** | Decompose the full matrix into latent "taste dimensions" |
+    | — | **Claude's picks** | Human-curated genre reference — what "correct" looks like |
     """)
     return
 
@@ -451,24 +451,13 @@ def build_pivot(filtered):
     return (pivot_centered,)
 
 
-
-
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Model 3 — Item-Based Collaborative Filtering (Cosine)
+    ## Model 2 — Item-Based Collaborative Filtering (Item CF)
 
     Transpose the matrix so rows are **books**, columns are users.
     Compute **cosine similarity** between the LOTR vector and every other book.
-
-    **Why cosine (not Pearson) here?**
-    Book vectors are extremely sparse — most users haven't rated most books.
-    Treating missing entries as 0 (neutral) and using cosine is more stable
-    than Pearson over a mostly-zero vector.
-
-    **Why item-based often beats user-based:**
-    Books don't change their rating patterns over time; users do.
-    The similarity matrix can also be precomputed once and reused.
     """)
     return
 
@@ -501,13 +490,13 @@ def model_ibcf(TOP_N, books, lotr_isbns, np, pivot_centered):
     # store the item matrix and index so the demo can reuse them
     item_matrix  = _item_matrix
     ibcf_book_index = _book_index
-    return ibcf, item_matrix, ibcf_book_index
+    return ibcf, ibcf_book_index, item_matrix
 
 
 @app.cell
 def _(mo):
     mo.md(r"""
-    ## Model 4 — SVD (Matrix Factorisation)
+    ## Model 3 — SVD (Matrix Factorisation)
 
     Decompose the rating matrix **R** (users × books) into:
 
@@ -562,8 +551,6 @@ def model_svd(K_LATENT, TOP_N, books, lotr_isbns, np, pivot_centered, svds):
     print(svd_recs[["title", "author", "svd_score"]].to_string(index=False))
     return book_embeddings, book_index, svd_recs
 
-
-# ── CLAUDE'S PICKS ────────────────────────────────────────────────────────────
 
 @app.cell
 def _(mo):
@@ -694,22 +681,25 @@ def _(mo):
     mo.md(r"""
     ## Interactive Demo
 
-    Pick any book from the 300 most-rated titles and a model.
+    Pick any book (LOTR editions always included) and a model.
     All four models are available — compare how their recommendations differ.
     """)
     return
 
 
 @app.cell
-def demo_controls(book_index, books, filtered, mo):
+def demo_controls(book_index, books, filtered, lotr_isbns, mo):
     _top_isbns = (
         filtered[filtered["isbn"].isin(book_index)]
         .groupby("isbn").size()
         .sort_values(ascending=False)
         .head(300).index.tolist()
     )
+    # always include LOTR editions that are in the SVD index
+    _lotr_in_index = [i for i in lotr_isbns if i in book_index]
+    _all_isbns = list(dict.fromkeys(_lotr_in_index + _top_isbns))  # LOTR first, deduped
     _meta = (
-        books[books["isbn"].isin(_top_isbns)][["isbn","title","author"]]
+        books[books["isbn"].isin(_all_isbns)][["isbn","title","author"]]
         .drop_duplicates("isbn")
         .sort_values("title")
     )
@@ -719,7 +709,7 @@ def demo_controls(book_index, books, filtered, mo):
     }
     demo_picker = mo.ui.dropdown(options=_options, label="Book:")
     model_picker = mo.ui.dropdown(
-        options=["SVD", "Item CF (Cosine)", "Popularity Baseline", "Claude's Picks"],
+        options=["SVD", "Item CF", "Popularity Baseline", "Claude's Picks"],
         value="SVD",
         label="Model:",
     )
@@ -729,8 +719,18 @@ def demo_controls(book_index, books, filtered, mo):
 
 @app.cell
 def demo_results(
-    TOP_N, book_embeddings, book_index, books, claude_recs, demo_picker,
-    filtered, ibcf_book_index, item_matrix, model_picker, mo, np,
+    TOP_N,
+    book_embeddings,
+    book_index,
+    books,
+    claude_recs,
+    demo_picker,
+    filtered,
+    ibcf_book_index,
+    item_matrix,
+    mo,
+    model_picker,
+    np,
 ):
     import pandas as _pd
 
@@ -757,7 +757,7 @@ def demo_results(
         _df = _df.merge(books[["isbn", "title", "author"]], on="isbn", how="left")
 
     # ── ITEM CF ───────────────────────────────────────────────────────────────
-    elif _model == "Item CF (Cosine)":
+    elif _model == "Item CF":
         if _isbn not in ibcf_book_index:
             mo.stop(True, mo.md("Book not in filtered matrix — try another."))
         _q   = item_matrix[ibcf_book_index.index(_isbn)]
